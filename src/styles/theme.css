@@ -1,0 +1,255 @@
+/* ─────────────────────────────────────────────────────────────────────────────
+   theme.css — Professional Claymorphism Design System (Light Theme)
+   Curated architectural warm alabaster background, tactile soft-clay depth,
+   and sophisticated terracotta orange, rich amber, and sage/forest green tones.
+   ───────────────────────────────────────────────────────────────────────────── */
+
+@import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap');
+
+:root {
+  /* ── Background & Canvas ───────────────────────────────────────────────── */
+  --bg-base:        #F6F5F0;    /* Architectural warm alabaster / cream stone */
+  --bg-surface:     #FFFFFF;    /* Crisp clay white surface */
+  --bg-surface-sub: #FAF9F5;    /* Soft warm secondary panel */
+  --bg-inset:       #EFECE4;    /* Clean recessed well for inputs/tracks */
+  --bg-overlay:     #E5E1D6;
+
+  /* ── Curated Professional Palette (Terracotta, Amber, Forest Jade) ─────── */
+  /* Primary: Warm Terracotta / Burnt Orange (Sophisticated & Crisp) */
+  --clay-orange:          #EA580C;
+  --clay-orange-hover:    #C2410C;
+  --clay-orange-bg:       #FFF7ED;
+  --clay-orange-border:   #FDBA74;
+  --clay-orange-text:     #9A3412;
+  --brand-primary:        #EA580C;
+  --brand-gradient:       linear-gradient(135deg, #F97316 0%, #EA580C 100%);
+  --brand-glow:           rgba(234, 88, 12, 0.18);
+
+  /* Secondary: Rich Honey Amber / Ochre */
+  --clay-yellow:          #D97706;
+  --clay-yellow-hover:    #B45309;
+  --clay-yellow-bg:       #FEF3C7;
+  --clay-yellow-border:   #FDE68A;
+  --clay-yellow-text:     #92400E;
+  --color-warning:        #D97706;
+
+  /* Accent: Sage Emerald / Forest Green */
+  --clay-green:           #059669;
+  --clay-green-hover:     #047857;
+  --clay-green-bg:        #ECFDF5;
+  --clay-green-border:    #A7F3D0;
+  --clay-green-text:      #065F46;
+  --color-success:        #059669;
+
+  /* Status: Elegant Coral Crimson */
+  --clay-red:             #E11D48;
+  --clay-red-hover:       #BE123C;
+  --clay-red-bg:          #FFF1F2;
+  --clay-red-border:      #FECDD3;
+  --clay-red-text:        #9F1239;
+  --color-error:          #E11D48;
+
+  /* Status: Slate Blue */
+  --clay-blue:            #2563EB;
+  --clay-blue-bg:         #EFF6FF;
+  --clay-blue-border:     #BFDBFE;
+  --clay-blue-text:       #1E40AF;
+  --color-info:           #2563EB;
+
+  /* ── Rating Tier Tones (Balanced & Legible) ────────────────────────────── */
+  --rating-newbie:       #71717A;
+  --rating-pupil:        #059669;
+  --rating-specialist:   #0891B2;
+  --rating-expert:       #2563EB;
+  --rating-cm:           #7C3AED;
+  --rating-master:       #D97706;
+  --rating-gm:           #EA580C;
+  --rating-legendary:    #DC2626;
+
+  /* ── Typography & Ink ──────────────────────────────────────────────────── */
+  --text-primary:   #1C1917;    /* Deep obsidian charcoal */
+  --text-secondary: #57534E;    /* Balanced warm graphite */
+  --text-muted:     #8C877D;    /* Gentle warm stone */
+  --text-inverse:   #FFFFFF;
+
+  /* ── Structural Borders ────────────────────────────────────────────────── */
+  --border-clay:    rgba(255, 255, 255, 0.95);
+  --border-subtle:  #E7E4DC;
+  --border-default: #DDD8CE;
+  --border-strong:  #CBC5B8;
+
+  /* ── Refined 3D Clay Elevation Shadows ──────────────────────────────────── */
+  /* Main Card Elevation */
+  --shadow-clay-card:
+    0 10px 25px -5px rgba(160, 150, 130, 0.12),
+    0 4px 10px -2px rgba(160, 150, 130, 0.08),
+    inset 0 1px 1px rgba(255, 255, 255, 0.9),
+    inset 0 -1px 2px rgba(180, 170, 150, 0.1);
+
+  --shadow-clay-card-hover:
+    0 16px 32px -6px rgba(160, 150, 130, 0.18),
+    0 6px 14px -3px rgba(160, 150, 130, 0.10),
+    inset 0 1px 1px rgba(255, 255, 255, 1),
+    inset 0 -1px 2px rgba(180, 170, 150, 0.15);
+
+  /* Small Chips / Pills */
+  --shadow-clay-sm:
+    0 2px 6px rgba(160, 150, 130, 0.1),
+    0 1px 2px rgba(160, 150, 130, 0.06),
+    inset 0 1px 1px rgba(255, 255, 255, 0.9);
+
+  /* Recessed Input Well */
+  --shadow-clay-inset:
+    inset 0 2px 4px rgba(140, 130, 115, 0.12),
+    inset 0 1px 2px rgba(140, 130, 115, 0.08),
+    0 1px 0 rgba(255, 255, 255, 0.8);
+
+  /* Terracotta Primary Button */
+  --shadow-clay-btn-orange:
+    0 4px 14px rgba(234, 88, 12, 0.28),
+    0 1px 3px rgba(234, 88, 12, 0.2),
+    inset 0 1px 1px rgba(255, 255, 255, 0.35);
+
+  /* Amber Secondary Button */
+  --shadow-clay-btn-yellow:
+    0 4px 14px rgba(217, 119, 6, 0.25),
+    0 1px 3px rgba(217, 119, 6, 0.18),
+    inset 0 1px 1px rgba(255, 255, 255, 0.4);
+
+  /* Green Accent Button */
+  --shadow-clay-btn-green:
+    0 4px 14px rgba(5, 150, 105, 0.25),
+    0 1px 3px rgba(5, 150, 105, 0.18),
+    inset 0 1px 1px rgba(255, 255, 255, 0.35);
+
+  /* Neutral Clay Button */
+  --shadow-clay-btn-neutral:
+    0 2px 6px rgba(160, 150, 130, 0.12),
+    0 1px 2px rgba(160, 150, 130, 0.06),
+    inset 0 1px 1px rgba(255, 255, 255, 0.9);
+
+  /* Tactile Press State */
+  --shadow-clay-pressed:
+    inset 0 2px 4px rgba(0, 0, 0, 0.12),
+    0 1px 2px rgba(0, 0, 0, 0.04);
+
+  /* ── Spacing Scale ──────────────────────────────────────────────────────── */
+  --space-1:  4px;
+  --space-2:  8px;
+  --space-3:  12px;
+  --space-4:  16px;
+  --space-5:  20px;
+  --space-6:  24px;
+  --space-8:  32px;
+  --space-10: 40px;
+  --space-12: 48px;
+  --space-16: 64px;
+
+  /* ── Radii ──────────────────────────────────────────────────────────────── */
+  --radius-sm:   8px;
+  --radius-md:   12px;
+  --radius-lg:   18px;
+  --radius-xl:   24px;
+  --radius-full: 9999px;
+
+  /* ── Typography Scale ───────────────────────────────────────────────────── */
+  --font-sans: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  --font-mono: 'JetBrains Mono', 'Fira Code', monospace;
+
+  --text-xs:   11px;
+  --text-sm:   13px;
+  --text-base: 14px;
+  --text-md:   15px;
+  --text-lg:   17px;
+  --text-xl:   20px;
+  --text-2xl:  24px;
+  --text-3xl:  30px;
+
+  /* ── Transitions ────────────────────────────────────────────────────────── */
+  --transition-fast:   120ms ease;
+  --transition-normal: 180ms ease;
+  --transition-slow:   280ms ease;
+
+  /* ── Layout Dimensions ──────────────────────────────────────────────────── */
+  --sidebar-width: 220px;
+  --titlebar-height: 38px;
+}
+
+/* ── Reset & Core ────────────────────────────────────────────────────────── */
+*, *::before, *::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+html {
+  font-size: var(--text-base);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+}
+
+body {
+  font-family: var(--font-sans);
+  background-color: var(--bg-base);
+  color: var(--text-primary);
+  line-height: 1.5;
+  overflow: hidden;
+  user-select: none;
+}
+
+input, textarea, pre, code, [data-selectable] {
+  user-select: text;
+}
+
+/* ── Scrollbars ─────────────────────────────────────────────────────────── */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: #D4CFBF;
+  border-radius: var(--radius-full);
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #BDB7A4;
+}
+
+/* ── Utility Classes ─────────────────────────────────────────────────────── */
+.sr-only {
+  position: absolute;
+  width: 1px; height: 1px;
+  padding: 0; margin: -1px;
+  overflow: hidden; clip: rect(0,0,0,0);
+  border: 0;
+}
+
+.truncate {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.mono { font-family: var(--font-mono); }
+
+/* ── Keyframes ───────────────────────────────────────────────────────────── */
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(4px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+@keyframes pulseDot {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50%       { opacity: 0.5; transform: scale(0.85); }
+}
+
+.anim-fade-in { animation: fadeIn var(--transition-normal) ease both; }
+.anim-spin    { animation: spin 1s linear infinite; }
+.anim-pulse   { animation: pulseDot 1.8s ease infinite; }
