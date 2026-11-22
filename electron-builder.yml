@@ -20,7 +20,6 @@ extraMetadata:
   main: out/main/index.js
 
 win:
-  signAndEditExecutable: false
   target:
     - target: portable
       arch:
