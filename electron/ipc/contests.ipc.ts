@@ -1,13 +1,16 @@
 import { ipcMain } from 'electron'
 import { kontestsService } from '../services/kontests.service'
-import { contestsRepo } from '../db/repositories/contests.repo'
+import { storageService } from '../services/storage.service'
+import { TtlCache } from '../utils/cache'
 import { logger } from '../utils/logger'
 import type { ContestFilter, IpcResult, Contest } from '../../shared/types'
 
 // ─────────────────────────────────────────────────────────────────────────────
-// contests.ipc.ts — IPC handlers for contest-related operations.
-// Pattern: thin handlers, call into services/repos, always return IpcResult.
+// contests.ipc.ts — Live contests fetched directly online from Kontests/CF API.
+// In-memory TTL cache (10 mins) prevents redundant API requests.
 // ─────────────────────────────────────────────────────────────────────────────
+
+const contestCache = new TtlCache<Contest[]>(10 * 60 * 1000)
 
 function ok<T>(data: T): IpcResult<T> {
   return { ok: true, data }
@@ -24,14 +27,19 @@ export function registerContestHandlers(): void {
   // ── contests:getAll ────────────────────────────────────────────────────────
   ipcMain.handle('contests:getAll', async (_event, filter?: ContestFilter) => {
     try {
-      // If cache is stale, fetch fresh data from API and store it
-      if (!contestsRepo.isCacheValid()) {
-        logger.info('Contest cache stale — fetching from kontests.net')
-        const fresh = await kontestsService.getAll()
-        contestsRepo.replaceAll(fresh)
+      let contests = contestCache.get('all_contests')
+      if (!contests) {
+        logger.info('Fetching live contests from kontests.net / Codeforces API')
+        contests = await kontestsService.getAll()
+        contestCache.set('all_contests', contests)
       }
 
-      let contests = contestsRepo.findAll()
+      // ── Apply reminders state ──────────────────────────────────────────────
+      const reminders = storageService.getReminders()
+      contests = contests.map(c => ({
+        ...c,
+        isReminded: !!reminders[c.id],
+      }))
 
       // ── Apply filters ──────────────────────────────────────────────────────
       if (filter?.sites?.length) {
@@ -49,15 +57,12 @@ export function registerContestHandlers(): void {
 
       return ok(contests)
     } catch (e) {
-      // If API is down, still return whatever is in the cache
-      try {
-        const cached = contestsRepo.findAll()
-        if (cached.length > 0) {
-          logger.warn('API failed, returning stale contest cache')
-          return ok(cached)
-        }
-      } catch { /* DB also failed */ }
-
+      // Fallback to cached copy if offline
+      const cached = contestCache.get('all_contests')
+      if (cached && cached.length > 0) {
+        logger.warn('Online fetch failed, returning in-memory cached contests')
+        return ok(cached)
+      }
       return err(e)
     }
   })
@@ -65,7 +70,7 @@ export function registerContestHandlers(): void {
   // ── contests:setReminder ───────────────────────────────────────────────────
   ipcMain.handle('contests:setReminder', async (_event, contestId: string, remindAt: number) => {
     try {
-      contestsRepo.setReminder(contestId, remindAt)
+      storageService.setReminder(contestId, remindAt)
       return ok(undefined)
     } catch (e) {
       return err(e)
@@ -75,7 +80,7 @@ export function registerContestHandlers(): void {
   // ── contests:removeReminder ────────────────────────────────────────────────
   ipcMain.handle('contests:removeReminder', async (_event, contestId: string) => {
     try {
-      contestsRepo.removeReminder(contestId)
+      storageService.removeReminder(contestId)
       return ok(undefined)
     } catch (e) {
       return err(e)

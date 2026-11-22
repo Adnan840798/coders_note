@@ -1,23 +1,19 @@
-import { contestsRepo } from './db/repositories/contests.repo'
+import { storageService } from './services/storage.service'
 import { notificationService } from './services/notification.service'
 import { logger } from './utils/logger'
 
 // ─────────────────────────────────────────────────────────────────────────────
-// scheduler.ts — Polls for due reminders every 60 seconds.
-// Keeps running in the background so notifications fire even when the
-// user hasn't opened the app window.
+// scheduler.ts — Polls for due contest reminders every 60 seconds (zero DB).
 // ─────────────────────────────────────────────────────────────────────────────
 
-const POLL_INTERVAL_MS = 60 * 1000  // 1 minute
+const POLL_INTERVAL_MS = 60 * 1000
 
 let intervalId: NodeJS.Timeout | null = null
 
 export function startScheduler(): void {
-  if (intervalId) return  // already running
+  if (intervalId) return
 
   logger.info('Reminder scheduler started (polling every 60s)')
-
-  // Run immediately on start, then on interval
   checkReminders()
   intervalId = setInterval(checkReminders, POLL_INTERVAL_MS)
 }
@@ -32,30 +28,26 @@ export function stopScheduler(): void {
 
 function checkReminders(): void {
   try {
-    const due = contestsRepo.getDueReminders()
+    const settings = storageService.getSettings()
+    if (!settings.notificationsEnabled) return
 
-    for (const reminder of due) {
-      logger.info(`Firing reminder for contest: ${reminder.contestId}`)
+    const reminders = storageService.getReminders()
+    const nowSec = Math.floor(Date.now() / 1000)
 
-      // Find the contest in cache to get its title and URL
-      const contests = contestsRepo.findAll()
-      const contest = contests.find(c => c.id === reminder.contestId)
+    for (const [contestId, remindAt] of Object.entries(reminders)) {
+      if (remindAt <= nowSec) {
+        logger.info(`Firing reminder for contest: ${contestId}`)
 
-      if (contest) {
-        const nowSec = Math.floor(Date.now() / 1000)
-        const minutesUntil = Math.max(0, Math.round((contest.startTime - nowSec) / 60))
-        notificationService.contestReminder(contest.title, minutesUntil, contest.url)
-      } else {
-        // Contest no longer in cache — send generic reminder
         notificationService.send(
           '🏆 Contest Reminder — Coders Note',
-          'A contest you were following is starting soon!'
+          `Your tracked contest (${contestId}) is starting soon!`
         )
-      }
 
-      contestsRepo.markReminderFired(reminder.id)
+        // Clean up fired reminder
+        storageService.removeReminder(contestId)
+      }
     }
   } catch (err) {
-    logger.error('Scheduler error during reminder check', err)
+    logger.error('Scheduler error during reminder check:', err)
   }
 }

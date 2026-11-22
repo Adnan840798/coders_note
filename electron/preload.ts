@@ -53,16 +53,6 @@ const api: ElectronAPI = {
   unbookmarkResource: (resourceId: number) =>
     ipcRenderer.invoke('resources:unbookmark', resourceId),
 
-  // ── Notes ───────────────────────────────────────────────────────────────────
-  getNotes: (problemId?: string) =>
-    ipcRenderer.invoke('notes:getAll', problemId),
-
-  upsertNote: (note: Parameters<ElectronAPI['upsertNote']>[0]) =>
-    ipcRenderer.invoke('notes:upsert', note),
-
-  deleteNote: (noteId: number) =>
-    ipcRenderer.invoke('notes:delete', noteId),
-
   // ── Practice / Problems ─────────────────────────────────────────────────────
   getCFProblem: (problemRef: string) =>
     ipcRenderer.invoke('codeforces:getProblem', problemRef),

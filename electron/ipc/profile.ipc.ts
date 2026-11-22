@@ -1,13 +1,12 @@
 import { ipcMain } from 'electron'
 import { codeforcesService } from '../services/codeforces.service'
 import { analysisService } from '../services/analysis.service'
-import { handlesRepo } from '../db/repositories/handles.repo'
-import { submissionsRepo } from '../db/repositories/submissions.repo'
+import { storageService } from '../services/storage.service'
 import { logger } from '../utils/logger'
 import type { IpcResult, Platform } from '../../shared/types'
 
 // ─────────────────────────────────────────────────────────────────────────────
-// profile.ipc.ts — Profile sync, rating history, handle management.
+// profile.ipc.ts — Profile sync, rating history, handle management (Online Mode).
 // ─────────────────────────────────────────────────────────────────────────────
 
 function ok<T>(data: T): IpcResult<T>  { return { ok: true,  data  } }
@@ -44,46 +43,25 @@ export function registerProfileHandlers(): void {
   })
 
   // ── profile:sync ────────────────────────────────────────────────────────────
-  // Full pipeline: fetch profile → upsert handle → incremental submission sync
-  // → invalidate analysis cache
+  // Online pipeline: validate profile against CF API -> record in saved handles
+  // -> invalidate cache
   ipcMain.handle('profile:sync', async (_event, platform: Platform, username: string) => {
     try {
       const cleanUser = username.trim()
-      logger.info(`Syncing profile: ${platform}/${cleanUser}`)
+      logger.info(`Syncing profile online: ${platform}/${cleanUser}`)
 
       if (platform !== 'codeforces') {
         return err(`Platform "${platform}" not yet supported`)
       }
 
-      // 1. Fetch and validate the profile (throws on bad handle)
+      // 1. Fetch and validate the profile directly from Codeforces API
       const profile = await codeforcesService.getProfile(cleanUser)
 
-      // 2. Upsert handle row with canonical handle name
-      const handleId = handlesRepo.upsert(platform, profile.handle, {
-        displayName: profile.handle,
-        avatarUrl:   profile.avatar,
-        rating:      profile.rating ?? undefined,
-        rank:        profile.rank ?? undefined,
-      })
+      // 2. Save handle into lightweight JSON storage for quick-switch dropdown
+      storageService.saveHandle(platform, profile.handle)
 
-      // 3. Fetch full submissions (CF user.status allows up to 10k submissions in 1 call)
-      const allSubs = await codeforcesService.getSubmissions(username, null)
-
-      if (allSubs.length > 0) {
-        submissionsRepo.deleteByHandle(handleId)
-        submissionsRepo.bulkInsert(
-          allSubs.map(s => ({ ...s, handleId }))
-        )
-        logger.info(`Synced ${allSubs.length} submissions for ${username}`)
-      } else {
-        logger.info(`No submissions found for ${username}`)
-      }
-
-      // 4. Update last_synced_at
-      handlesRepo.touchSyncedAt(handleId)
-
-      // 5. Invalidate stale analysis cache
-      analysisService.invalidate(platform, username)
+      // 3. Invalidate analysis cache so next view computes fresh stats
+      analysisService.invalidate(platform, profile.handle)
 
       return ok(undefined)
     } catch (e) { return err(e) }
@@ -92,14 +70,14 @@ export function registerProfileHandlers(): void {
   // ── profile:getSavedHandles ────────────────────────────────────────────────
   ipcMain.handle('profile:getSavedHandles', async () => {
     try {
-      return ok(handlesRepo.findAll())
+      return ok(storageService.getSavedHandles())
     } catch (e) { return err(e) }
   })
 
   // ── profile:removeHandle ───────────────────────────────────────────────────
   ipcMain.handle('profile:removeHandle', async (_event, handleId: number) => {
     try {
-      handlesRepo.deleteById(handleId)  // CASCADE removes submissions etc.
+      storageService.removeHandle(handleId)
       return ok(undefined)
     } catch (e) { return err(e) }
   })

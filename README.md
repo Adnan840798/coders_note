@@ -93,23 +93,11 @@ coders_note/
     └── e2e/                     # Playwright integration tests
 ```
 
-## Database Schema
+## Storage & Architecture
 
-Data is managed locally via SQLite (`better-sqlite3`). Schema changes are managed through numbered SQL migrations located in `electron/db/migrations/`.
+The application runs in **pure online mode**, fetching profile data, contest schedules, and problem analytics directly from official APIs (Codeforces and Kontests). 
 
-- **handles:** Tracked user profiles per platform.
-- **submissions:** Cached submission history.
-- **submission_tags:** Normalized relations between submissions and topic tags.
-- **rating_history:** Historical contest rating changes.
-- **contests_cache:** Cached contest schedules.
-- **reminders:** User-configured contest alerts.
-- **resources:** Curated hub entries and references.
-- **bookmarks:** User-saved resources.
-- **notes:** User-authored problem notes.
-- **weak_topics_cache:** Pre-computed analytics data.
-- **settings:** Key-value store for application configuration.
-
-*Note: All timestamps are stored internally as UTC Unix seconds and converted to local time during rendering.*
+User preferences (saved handles, default platform, bookmarks, and notification settings) are stored locally in a lightweight JSON configuration file in the user's OS data directory (`%APPDATA%/coders-note/` on Windows). There are **no native C++ database dependencies or migrations required**, ensuring instant startup, zero background locking, and easy cross-platform packaging.
 
 ## Analytics Engine
 
@@ -123,7 +111,7 @@ The application performs automated topic analysis based on predefined algorithmi
 
 ## Configuration
 
-Application configuration is stored persistently in the SQLite `settings` table and is dynamically managed through the user interface.
+Application configuration is stored persistently in local JSON storage and is dynamically managed through the user interface.
 
 | Key | Default Value | Description |
 |---|---|---|

@@ -1,8 +1,8 @@
 import { ipcMain } from 'electron'
-import { resourcesRepo } from '../db/repositories/resources.repo'
-import { handlesRepo } from '../db/repositories/handles.repo'
+import { CURATED_RESOURCES } from '../data/resources.data'
+import { storageService } from '../services/storage.service'
 import { logger } from '../utils/logger'
-import type { IpcResult, ResourceFilter, Platform } from '../../shared/types'
+import type { IpcResult, ResourceFilter, Resource } from '../../shared/types'
 
 function ok<T>(data: T): IpcResult<T>  { return { ok: true,  data  } }
 function err(e: unknown): IpcResult<never> {
@@ -11,46 +11,52 @@ function err(e: unknown): IpcResult<never> {
   return { ok: false, error: msg }
 }
 
-// Helper: resolve the active handle id from settings (or use -1 for no handle)
-function getActiveHandleId(): number {
-  try {
-    const { getDb } = require('../db/client')
-    const row = getDb()
-      .prepare("SELECT value FROM settings WHERE key = 'defaultHandle'")
-      .get() as { value: string } | undefined
-
-    if (!row?.value) return -1
-
-    // defaultHandle is stored as "platform:username"
-    const [platform, username] = row.value.split(':')
-    const handle = handlesRepo.findByPlatformAndUsername(platform as Platform, username)
-    return handle?.id ?? -1
-  } catch { return -1 }
-}
-
 export function registerResourceHandlers(): void {
 
   ipcMain.handle('resources:getAll', async (_event, filter?: ResourceFilter) => {
     try {
-      const handleId = getActiveHandleId()
-      return ok(resourcesRepo.findAll(filter, handleId))
+      const bookmarkedIds = storageService.getBookmarks()
+
+      let resources: Resource[] = CURATED_RESOURCES.map(r => ({
+        ...r,
+        isBookmarked: bookmarkedIds.has(r.id),
+      }))
+
+      if (filter?.topic) {
+        resources = resources.filter(r => r.topic === filter.topic)
+      }
+      if (filter?.difficulty) {
+        resources = resources.filter(r => r.difficulty === filter.difficulty)
+      }
+      if (filter?.type) {
+        resources = resources.filter(r => r.type === filter.type)
+      }
+      if (filter?.bookmarkedOnly) {
+        resources = resources.filter(r => r.isBookmarked)
+      }
+      if (filter?.search) {
+        const q = filter.search.toLowerCase()
+        resources = resources.filter(r =>
+          r.title.toLowerCase().includes(q) ||
+          r.description.toLowerCase().includes(q) ||
+          r.topic.toLowerCase().includes(q)
+        )
+      }
+
+      return ok(resources)
     } catch (e) { return err(e) }
   })
 
   ipcMain.handle('resources:bookmark', async (_event, resourceId: number) => {
     try {
-      const handleId = getActiveHandleId()
-      if (handleId < 0) return err('No active handle — add a profile first')
-      resourcesRepo.bookmark(resourceId, handleId)
+      storageService.addBookmark(resourceId)
       return ok(undefined)
     } catch (e) { return err(e) }
   })
 
   ipcMain.handle('resources:unbookmark', async (_event, resourceId: number) => {
     try {
-      const handleId = getActiveHandleId()
-      if (handleId < 0) return err('No active handle')
-      resourcesRepo.unbookmark(resourceId, handleId)
+      storageService.removeBookmark(resourceId)
       return ok(undefined)
     } catch (e) { return err(e) }
   })

@@ -10,16 +10,7 @@ files:
   - out
   - '!out/**/*.map'
 
-# Unpack native bindings (.node files) so Electron can load them from outside the asar
-asarUnpack:
-  - "**/*.node"
-
-# Copy SQL migrations into resources/ so the packaged app can run them at startup
 extraResources:
-  - from: electron/db/migrations
-    to: migrations
-    filter:
-      - "*.sql"
   - from: build/icon.png
     to: icon.png
   - from: build/tray-icon.png
@@ -29,8 +20,6 @@ extraMetadata:
   main: out/main/index.js
 
 win:
-  # signAndEditExecutable=false skips rcedit resource stamping AND signing,
-  # which avoids the winCodeSign download that fails on Windows without Developer Mode.
   signAndEditExecutable: false
   target:
     - target: portable

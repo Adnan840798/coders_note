@@ -1,15 +1,13 @@
-import { submissionsRepo } from '../db/repositories/submissions.repo'
-import { handlesRepo } from '../db/repositories/handles.repo'
 import { codeforcesService } from './codeforces.service'
-import { getDb } from '../db/client'
 import { analysisCache } from '../utils/cache'
 import { logger } from '../utils/logger'
 import type { AnalysisResult, BestContestRank, Platform, TopicStat, TopicStrength, Verdict } from '../../shared/types'
 
 // ─────────────────────────────────────────────────────────────────────────────
-// analysis.service.ts — Weak/strong topic detection + profile comparison.
+// analysis.service.ts — In-memory weak/strong topic detection + profile comparison.
+// Computes analytics directly from Codeforces API data in memory (zero database).
 //
-// THRESHOLDS (documented here — graders WILL ask):
+// THRESHOLDS:
 //   MIN_ATTEMPTS  = 3    — fewer than this → "insufficient data", never flagged
 //   WEAK_ACCURACY = 0.40 — accuracy < 40% with ≥ MIN_ATTEMPTS → "weak"
 //   STRONG_ACCURACY = 0.80 — accuracy ≥ 80% with ≥ MIN_ATTEMPTS → "strong"
@@ -20,14 +18,14 @@ const MIN_ATTEMPTS    = 3
 const WEAK_ACCURACY   = 0.40
 const STRONG_ACCURACY = 0.80
 
-function classifyStrength(accuracy: number, attempts: number): TopicStrength {
+export function classifyStrength(accuracy: number, attempts: number): TopicStrength {
   if (attempts < MIN_ATTEMPTS)  return 'insufficient'
   if (accuracy < WEAK_ACCURACY) return 'weak'
   if (accuracy >= STRONG_ACCURACY) return 'strong'
   return 'average'
 }
 
-function buildTopicStats(
+export function buildTopicStats(
   raw: { tag: string; attempts: number; solved: number }[]
 ): TopicStat[] {
   return raw.map(({ tag, attempts, solved }) => {
@@ -44,48 +42,27 @@ function buildTopicStats(
 
 export const analysisService = {
   /**
-   * Compute full analysis for a handle directly from SQLite.
-   * Results are written to weak_topics_cache in SQLite.
+   * Compute full analysis for a handle directly in memory from Codeforces APIs.
    */
   async getAnalysis(platform: Platform, username: string): Promise<AnalysisResult> {
     const cleanUser = username.trim()
     logger.info(`Computing analysis for ${platform}:${cleanUser}`)
 
-    let handle = handlesRepo.findByPlatformAndUsername(platform, cleanUser)
-    if (!handle) {
-      logger.info(`Handle ${platform}/${cleanUser} not in DB — performing initial sync`)
-      if (platform === 'codeforces') {
-        const profile = await codeforcesService.getProfile(cleanUser)
-        const handleId = handlesRepo.upsert(platform, profile.handle, {
-          displayName: profile.handle,
-          avatarUrl:   profile.avatar,
-          rating:      profile.rating ?? undefined,
-          rank:        profile.rank ?? undefined,
-        })
-        const subs = await codeforcesService.getSubmissions(profile.handle, null)
-        if (subs.length > 0) {
-          submissionsRepo.deleteByHandle(handleId)
-          submissionsRepo.bulkInsert(subs.map(s => ({ ...s, handleId })))
-        }
-        handlesRepo.touchSyncedAt(handleId)
-        handle = handlesRepo.findById(handleId)
-      }
+    const cacheKey = `analysis:${platform}:${cleanUser.toLowerCase()}`
+    const cached = analysisCache.get(cacheKey) as AnalysisResult | null
+    if (cached) {
+      logger.info(`Returning cached analysis for ${cleanUser}`)
+      return cached
     }
-    if (!handle) throw new Error(`Handle not found in DB: ${platform}/${cleanUser}`)
 
-    // ── Fetch raw stats from DB ────────────────────────────────────────────────
-    const tagStats       = submissionsRepo.getTagStats(handle.id)
-    const verdictRaw     = submissionsRepo.getVerdictBreakdown(handle.id)
-    const solvesByRating = submissionsRepo.getSolvesByRating(handle.id)
-    const solvedSubs     = submissionsRepo.findSolvedByHandle(handle.id)
-    const dailySolves    = submissionsRepo.getDailySolves(handle.id)
+    if (platform !== 'codeforces') {
+      throw new Error(`Platform "${platform}" is not yet supported`)
+    }
 
-    // ── Build topic stats ──────────────────────────────────────────────────────
-    const allTopics  = buildTopicStats(tagStats)
-    const weakTopics   = allTopics.filter(t => t.strength === 'weak')
-    const strongTopics = allTopics.filter(t => t.strength === 'strong')
+    // 1. Fetch all submissions from Codeforces API
+    const allSubs = await codeforcesService.getSubmissions(cleanUser, null)
 
-    // ── Build verdict breakdown (fill missing verdicts with 0) ────────────────
+    // 2. Initialize aggregations
     const verdictBreakdown: Record<Verdict, number> = {
       OK:                    0,
       WRONG_ANSWER:          0,
@@ -96,12 +73,73 @@ export const analysisService = {
       SKIPPED:               0,
       CHALLENGED:            0,
       OTHER:                 0,
-      ...verdictRaw,
     }
 
-    const totalSubmissions = Object.values(verdictBreakdown).reduce((a, b) => a + b, 0)
-    const totalSolved = submissionsRepo.getUniqueSolvedCount(handle.id)
-    const uniqueAttempted = submissionsRepo.getUniqueAttemptedCount(handle.id)
+    const tagMap = new Map<string, { attempts: number; solved: number }>()
+    const solvesByRating: Record<number, number> = {}
+    const dailySolves: Record<string, number> = {}
+    const solvedProblemIds = new Set<string>()
+    const attemptedProblemIds = new Set<string>()
+
+    for (const sub of allSubs) {
+      // Verdict count
+      const v = sub.verdict as Verdict
+      if (verdictBreakdown[v] !== undefined) {
+        verdictBreakdown[v]++
+      } else {
+        verdictBreakdown.OTHER++
+      }
+
+      attemptedProblemIds.add(sub.problemId)
+      const isOk = sub.verdict === 'OK'
+
+      // Tag statistics
+      if (Array.isArray(sub.tags)) {
+        for (const tag of sub.tags) {
+          if (!tag) continue
+          let stat = tagMap.get(tag)
+          if (!stat) {
+            stat = { attempts: 0, solved: 0 }
+            tagMap.set(tag, stat)
+          }
+          stat.attempts++
+          if (isOk) {
+            stat.solved++
+          }
+        }
+      }
+
+      // Solves breakdown & heatmap (only for accepted solutions)
+      if (isOk && !solvedProblemIds.has(sub.problemId)) {
+        solvedProblemIds.add(sub.problemId)
+
+        // Rating distribution
+        if (sub.problemRating && sub.problemRating > 0) {
+          solvesByRating[sub.problemRating] = (solvesByRating[sub.problemRating] || 0) + 1
+        }
+
+        // Daily solves heatmap: YYYY-MM-DD
+        if (sub.submittedAt) {
+          const date = new Date(sub.submittedAt * 1000).toISOString().slice(0, 10)
+          dailySolves[date] = (dailySolves[date] || 0) + 1
+        }
+      }
+    }
+
+    // 3. Build topic stats
+    const rawTagStats = Array.from(tagMap.entries()).map(([tag, stat]) => ({
+      tag,
+      attempts: stat.attempts,
+      solved: stat.solved,
+    }))
+
+    const allTopics = buildTopicStats(rawTagStats)
+    const weakTopics = allTopics.filter(t => t.strength === 'weak')
+    const strongTopics = allTopics.filter(t => t.strength === 'strong')
+
+    const totalSubmissions = allSubs.length
+    const totalSolved = solvedProblemIds.size
+    const uniqueAttempted = attemptedProblemIds.size
     const overallAccuracy = uniqueAttempted > 0
       ? (totalSolved / uniqueAttempted) * 100
       : (totalSubmissions > 0 ? (verdictBreakdown.OK / totalSubmissions) * 100 : 0)
@@ -110,7 +148,6 @@ export const analysisService = {
     const ratingNums = Object.keys(solvesByRating).map(Number).filter(n => !isNaN(n) && n > 0)
     const maxSolvedRating = ratingNums.length > 0 ? Math.max(...ratingNums) : null
 
-    // Most solved rating bucket
     let mostSolvedRating: { rating: string; count: number } | null = null
     let maxRatingCount = 0
     for (const [rating, count] of Object.entries(solvesByRating)) {
@@ -120,40 +157,37 @@ export const analysisService = {
       }
     }
 
-    // Most solved topic
     let mostSolvedTopic: { tag: string; solved: number } | null = null
     const sortedBySolved = [...allTopics].sort((a, b) => b.solved - a.solved)
     if (sortedBySolved.length > 0 && sortedBySolved[0].solved > 0) {
       mostSolvedTopic = { tag: sortedBySolved[0].tag, solved: sortedBySolved[0].solved }
     }
 
-    // Contest & Rating History measurements
+    // 4. Contest & Rating History
     let totalContests = 0
     let bestContestRank: BestContestRank | null = null
     let maxRatingGain: number | null = null
 
-    if (platform === 'codeforces') {
-      try {
-        const history = await codeforcesService.getRatingHistory(username)
-        totalContests = history.length
-        if (history.length > 0) {
-          const best = history.reduce((prev, curr) => curr.rank < prev.rank ? curr : prev, history[0])
-          bestContestRank = {
-            rank: best.rank,
-            contestName: best.contestName,
-            contestId: best.contestId,
-          }
-          const gains = history.map(h => h.newRating - h.oldRating)
-          const maxGain = Math.max(...gains)
-          if (maxGain > 0) maxRatingGain = maxGain
+    try {
+      const history = await codeforcesService.getRatingHistory(cleanUser)
+      totalContests = history.length
+      if (history.length > 0) {
+        const best = history.reduce((prev, curr) => curr.rank < prev.rank ? curr : prev, history[0])
+        bestContestRank = {
+          rank: best.rank,
+          contestName: best.contestName,
+          contestId: best.contestId,
         }
-      } catch (e) {
-        logger.warn(`Could not fetch rating history for ${username}:`, e)
+        const gains = history.map(h => h.newRating - h.oldRating)
+        const maxGain = Math.max(...gains)
+        if (maxGain > 0) maxRatingGain = maxGain
       }
+    } catch (e) {
+      logger.warn(`Could not fetch rating history for ${cleanUser}:`, e)
     }
 
     const result: AnalysisResult = {
-      handle:   username,
+      handle: cleanUser,
       platform,
       weakTopics,
       strongTopics,
@@ -173,22 +207,18 @@ export const analysisService = {
       computedAt: Math.floor(Date.now() / 1000),
     }
 
-    // ── Persist to weak_topics_cache ───────────────────────────────────────────
-    this._persistWeakTopics(handle.id, allTopics)
-
+    // Cache in memory for 15 minutes
+    analysisCache.set(cacheKey, result)
     return result
   },
 
   /**
-   * Compare two handles side-by-side.
-   * Returns both AnalysisResult objects — the UI does the visual diff.
-   * Errors are prefixed with HANDLE_A: or HANDLE_B: so the UI can identify which field failed.
+   * Compare two handles side-by-side in memory.
    */
   async compareProfiles(
     a: { platform: Platform; username: string },
     b: { platform: Platform; username: string }
   ): Promise<{ a: AnalysisResult; b: AnalysisResult }> {
-    // Fetch sequentially — not in parallel — to respect CF rate limits
     let resultA: AnalysisResult
     try {
       resultA = await this.getAnalysis(a.platform, a.username)
@@ -204,33 +234,9 @@ export const analysisService = {
     return { a: resultA, b: resultB }
   },
 
-  /** Invalidate cached analysis for a handle (call after a new sync). */
+  /** Invalidate cached analysis for a handle */
   invalidate(platform: Platform, username: string): void {
     const key = `analysis:${platform}:${username.toLowerCase()}`
     analysisCache.invalidate(key)
-
-    const handle = handlesRepo.findByPlatformAndUsername(platform, username)
-    if (handle) {
-      getDb()
-        .prepare('DELETE FROM weak_topics_cache WHERE handle_id = ?')
-        .run(handle.id)
-    }
-  },
-
-  _persistWeakTopics(handleId: number, topics: TopicStat[]): void {
-    const db = getDb()
-    const now = Math.floor(Date.now() / 1000)
-    const insert = db.prepare(`
-      INSERT INTO weak_topics_cache
-        (handle_id, tag, attempts, solved, accuracy, computed_at)
-      VALUES (?, ?, ?, ?, ?, ?)
-    `)
-    const upsertAll = db.transaction(() => {
-      db.prepare('DELETE FROM weak_topics_cache WHERE handle_id = ?').run(handleId)
-      for (const t of topics) {
-        insert.run(handleId, t.tag, t.attempts, t.solved, t.accuracy, now)
-      }
-    })
-    upsertAll()
   },
 }

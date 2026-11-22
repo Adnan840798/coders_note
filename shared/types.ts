@@ -139,16 +139,6 @@ export interface Resource {
   isBookmarked?: boolean
 }
 
-// ── Notes ─────────────────────────────────────────────────────────────────────
-export interface Note {
-  id: number
-  problemId: string
-  problemName: string
-  body: string
-  createdAt: number
-  updatedAt: number
-}
-
 // ── Practice ──────────────────────────────────────────────────────────────────
 export interface PracticeProblem {
   id: string              // e.g. "1900A"
@@ -202,11 +192,6 @@ export interface ElectronAPI {
   getResources: (filter?: ResourceFilter) => Promise<IpcResult<Resource[]>>
   bookmarkResource: (resourceId: number) => Promise<IpcResult<void>>
   unbookmarkResource: (resourceId: number) => Promise<IpcResult<void>>
-
-  // Notes
-  getNotes: (problemId?: string) => Promise<IpcResult<Note[]>>
-  upsertNote: (note: Omit<Note, 'id' | 'createdAt' | 'updatedAt'> & { id?: number }) => Promise<IpcResult<Note>>
-  deleteNote: (noteId: number) => Promise<IpcResult<void>>
 
   // Practice / Problems
   getCFProblem: (problemRef: string) => Promise<IpcResult<PracticeProblem>>

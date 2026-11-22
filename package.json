@@ -12,8 +12,6 @@
     "preview": "electron-vite preview -c electron.vite.config.ts",
     "package": "electron-vite build -c electron.vite.config.ts && electron-builder",
     "package:win-portable": "electron-vite build -c electron.vite.config.ts && electron-builder --win portable",
-    "postinstall": "electron-builder install-app-deps",
-    "rebuild": "electron-rebuild -f -w better-sqlite3",
     "lint": "eslint . --ext .ts,.svelte",
     "format": "prettier --write .",
     "test": "vitest run --config vitest.config.ts",
@@ -21,15 +19,12 @@
     "test:e2e": "playwright test"
   },
   "dependencies": {
-    "better-sqlite3": "^9.4.3",
     "electron-updater": "^6.1.8"
   },
   "devDependencies": {
-    "@electron/rebuild": "^3.6.0",
     "@playwright/test": "^1.43.1",
     "@sveltejs/vite-plugin-svelte": "^3.1.0",
     "@tsconfig/svelte": "^5.0.4",
-    "@types/better-sqlite3": "^7.6.9",
     "@types/node": "^20.12.7",
     "@typescript-eslint/eslint-plugin": "^7.7.1",
     "@typescript-eslint/parser": "^7.7.1",

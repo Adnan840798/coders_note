@@ -1,11 +1,9 @@
 import { app, BrowserWindow, shell, ipcMain, Tray, Menu, nativeImage } from 'electron'
 import { join } from 'path'
-import { initDb } from './db/client'
 import { registerContestHandlers } from './ipc/contests.ipc'
 import { registerProfileHandlers } from './ipc/profile.ipc'
 import { registerAnalysisHandlers } from './ipc/analysis.ipc'
 import { registerResourceHandlers } from './ipc/resources.ipc'
-import { registerNoteHandlers } from './ipc/notes.ipc'
 import { registerSettingsHandlers } from './ipc/settings.ipc'
 import { startScheduler } from './scheduler'
 import { logger } from './utils/logger'
@@ -110,24 +108,19 @@ ipcMain.on('window:close', () => mainWindow?.close())
 app.whenReady().then(async () => {
   logger.info(`Starting Coders Note v${app.getVersion()} on ${process.platform}`)
 
-  // 1. Init database (runs migrations)
-  await initDb()
-  logger.info('Database initialised')
-
-  // 2. Register all IPC handlers
+  // 1. Register all IPC handlers
   registerContestHandlers()
   registerProfileHandlers()
   registerAnalysisHandlers()
   registerResourceHandlers()
-  registerNoteHandlers()
   registerSettingsHandlers()
   logger.info('IPC handlers registered')
 
-  // 3. Start reminder scheduler
+  // 2. Start reminder scheduler
   startScheduler()
   logger.info('Scheduler started')
 
-  // 4. Create window + tray
+  // 3. Create window + tray
   createWindow()
   createTray()
 

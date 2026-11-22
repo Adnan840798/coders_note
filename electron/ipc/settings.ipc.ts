@@ -1,5 +1,5 @@
 import { ipcMain } from 'electron'
-import { getDb } from '../db/client'
+import { storageService } from '../services/storage.service'
 import { logger } from '../utils/logger'
 import type { AppSettings, IpcResult } from '../../shared/types'
 
@@ -10,43 +10,18 @@ function err(e: unknown): IpcResult<never> {
   return { ok: false, error: msg }
 }
 
-// ── Read all settings as a typed AppSettings object ───────────────────────────
-function readSettings(): AppSettings {
-  const db = getDb()
-  const rows = db.prepare('SELECT key, value FROM settings').all() as { key: string; value: string }[]
-  const map = Object.fromEntries(rows.map(r => [r.key, r.value]))
-
-  return {
-    theme:                       (map.theme ?? 'dark') as AppSettings['theme'],
-    defaultHandle:               map.defaultHandle || null,
-    defaultPlatform:             (map.defaultPlatform ?? 'codeforces') as AppSettings['defaultPlatform'],
-    notificationsEnabled:        map.notificationsEnabled === 'true',
-    reminderLeadMinutes:         parseInt(map.reminderLeadMinutes ?? '30', 10),
-    cacheRefreshIntervalMinutes: parseInt(map.cacheRefreshIntervalMinutes ?? '20', 10),
-  }
-}
-
 export function registerSettingsHandlers(): void {
 
   ipcMain.handle('settings:get', async () => {
     try {
-      return ok(readSettings())
+      return ok(storageService.getSettings())
     } catch (e) { return err(e) }
   })
 
   ipcMain.handle('settings:update', async (_event, updates: Partial<AppSettings>) => {
     try {
-      const db = getDb()
-      const stmt = db.prepare('INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)')
-
-      const upsertAll = db.transaction(() => {
-        for (const [k, v] of Object.entries(updates)) {
-          stmt.run(k, String(v ?? ''))
-        }
-      })
-      upsertAll()
-
-      return ok(readSettings())
+      const updated = storageService.updateSettings(updates)
+      return ok(updated)
     } catch (e) { return err(e) }
   })
 }
