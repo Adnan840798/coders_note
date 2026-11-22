@@ -40,7 +40,9 @@ function createWindow(): void {
     frame: false,          // Custom titlebar
     titleBarStyle: 'hidden',
     backgroundColor: '#F4F2EC',
-    icon: join(__dirname, '../../build/icon.png'),
+    icon: app.isPackaged
+      ? join(process.resourcesPath, 'icon.png')
+      : join(__dirname, '../../build/icon.png'),
     webPreferences: {
       preload: join(__dirname, '../preload/index.js'),
       // ── SECURITY: these two must never be flipped ──────────────────────────
@@ -74,7 +76,9 @@ function createWindow(): void {
 
 function createTray(): void {
   try {
-    const iconPath = join(__dirname, '../../build/tray-icon.png')
+    const iconPath = app.isPackaged
+      ? join(process.resourcesPath, 'tray-icon.png')
+      : join(__dirname, '../../build/tray-icon.png')
     const icon = nativeImage.createFromPath(iconPath)
     if (!icon.isEmpty()) {
       tray = new Tray(icon)

@@ -52,13 +52,12 @@ export async function initDb(): Promise<void> {
  * Runs each migration in a transaction so partial failures are rolled back.
  */
 function getMigrationsDir(): string {
-  // In dev: electron-vite bundles to out/main/index.js — __dirname = out/main/
-  // The source migrations live at <projectRoot>/electron/db/migrations/
-  // In prod: migrations are copied next to the bundle or resources, so fallback accordingly.
-  if (process.env.NODE_ENV === 'development' || !app.isPackaged) {
-    return join(app.getAppPath(), 'electron', 'db', 'migrations')
+  // In prod (packaged): migrations are bundled into resources/migrations via extraResources
+  if (app.isPackaged) {
+    return join(process.resourcesPath, 'migrations')
   }
-  return join(__dirname, 'migrations')
+  // In dev: source migrations live at <projectRoot>/electron/db/migrations/
+  return join(app.getAppPath(), 'electron', 'db', 'migrations')
 }
 
 function runMigrations(db: Database.Database): void {

@@ -11,6 +11,8 @@
     "build": "electron-vite build -c electron.vite.config.ts",
     "preview": "electron-vite preview -c electron.vite.config.ts",
     "package": "electron-vite build -c electron.vite.config.ts && electron-builder",
+    "package:win-portable": "electron-vite build -c electron.vite.config.ts && electron-builder --win portable",
+    "postinstall": "electron-builder install-app-deps",
     "rebuild": "electron-rebuild -f -w better-sqlite3",
     "lint": "eslint . --ext .ts,.svelte",
     "format": "prettier --write .",
