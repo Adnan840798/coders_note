@@ -27,19 +27,33 @@ export function registerContestHandlers(): void {
   // ── contests:getAll ────────────────────────────────────────────────────────
   ipcMain.handle('contests:getAll', async (_event, filter?: ContestFilter) => {
     try {
-      let contests = contestCache.get('all_contests')
-      if (!contests) {
+      let rawContests = contestCache.get('all_contests')
+      if (!rawContests) {
         logger.info('Fetching live contests from kontests.net / Codeforces API')
-        contests = await kontestsService.getAll()
-        contestCache.set('all_contests', contests)
+        rawContests = await kontestsService.getAll()
+        contestCache.set('all_contests', rawContests)
       }
 
-      // ── Apply reminders state ──────────────────────────────────────────────
+      // ── Apply live status & reminders state ─────────────────────────────────
+      const now = Math.floor(Date.now() / 1000)
       const reminders = storageService.getReminders()
-      contests = contests.map(c => ({
-        ...c,
-        isReminded: !!reminders[c.id],
-      }))
+
+      let contests: Contest[] = rawContests.map(c => {
+        let status: ContestStatus = 'upcoming'
+        if (now < c.startTime) {
+          status = 'upcoming'
+        } else if (now < c.startTime + c.duration) {
+          status = 'running'
+        } else {
+          status = 'ended'
+        }
+
+        return {
+          ...c,
+          status,
+          hasReminder: !!reminders[c.id],
+        }
+      })
 
       // ── Apply filters ──────────────────────────────────────────────────────
       if (filter?.sites?.length) {
@@ -55,13 +69,27 @@ export function registerContestHandlers(): void {
         )
       }
 
+      // ── Sort: nearest startTime first for upcoming/running, newest first for ended
+      if (filter?.status?.length === 1 && filter.status[0] === 'ended') {
+        contests.sort((a, b) => b.startTime - a.startTime)
+      } else {
+        contests.sort((a, b) => a.startTime - b.startTime)
+      }
+
       return ok(contests)
     } catch (e) {
       // Fallback to cached copy if offline
       const cached = contestCache.get('all_contests')
       if (cached && cached.length > 0) {
         logger.warn('Online fetch failed, returning in-memory cached contests')
-        return ok(cached)
+        const now = Math.floor(Date.now() / 1000)
+        const reminders = storageService.getReminders()
+        const fallback = cached.map(c => ({
+          ...c,
+          status: (now < c.startTime ? 'upcoming' : (now < c.startTime + c.duration ? 'running' : 'ended')) as ContestStatus,
+          hasReminder: !!reminders[c.id],
+        }))
+        return ok(fallback)
       }
       return err(e)
     }

@@ -1,7 +1,7 @@
 import { httpGet } from '../utils/http'
 import { contestsCache } from '../utils/cache'
 import { logger } from '../utils/logger'
-import type { Contest } from '../../shared/types'
+import type { Contest, ContestStatus } from '../../shared/types'
 
 // ─────────────────────────────────────────────────────────────────────────────
 // kontests.service.ts — Fetches contests from kontests.net (free aggregator).
@@ -39,7 +39,14 @@ interface KontestsContest {
   status: string       // "BEFORE" | "CODING" | "FINISHED"
 }
 
-function parseKontestsContest(raw: KontestsContest): Omit<Contest, 'status' | 'hasReminder'> | null {
+export function computeContestStatus(startTime: number, duration: number): ContestStatus {
+  const now = Math.floor(Date.now() / 1000)
+  if (now < startTime) return 'upcoming'
+  if (now < startTime + duration) return 'running'
+  return 'ended'
+}
+
+function parseKontestsContest(raw: KontestsContest): Contest | null {
   try {
     const startMs  = new Date(raw.start_time).getTime()
     const duration = Math.round(parseFloat(raw.duration))
@@ -47,6 +54,7 @@ function parseKontestsContest(raw: KontestsContest): Omit<Contest, 'status' | 'h
     // Skip invalid entries
     if (isNaN(startMs) || isNaN(duration) || duration <= 0) return null
 
+    const startTime = Math.floor(startMs / 1000)
     const id = `${(SITE_MAP[raw.site] ?? raw.site).replace(/\s/g, '_')}_${startMs}`
 
     return {
@@ -54,8 +62,9 @@ function parseKontestsContest(raw: KontestsContest): Omit<Contest, 'status' | 'h
       site:      SITE_MAP[raw.site] ?? raw.site.toLowerCase(),
       title:     raw.name,
       url:       raw.url,
-      startTime: Math.floor(startMs / 1000),   // → Unix seconds UTC
+      startTime,
       duration,
+      status:    computeContestStatus(startTime, duration),
     }
   } catch {
     return null
@@ -80,8 +89,8 @@ interface CfContestListResponse {
 }
 
 export const kontestsService = {
-  async getAll(): Promise<Omit<Contest, 'status' | 'hasReminder'>[]> {
-    const cached = contestsCache.get(CACHE_KEY) as Omit<Contest, 'status' | 'hasReminder'>[] | null
+  async getAll(): Promise<Contest[]> {
+    const cached = contestsCache.get(CACHE_KEY) as Contest[] | null
     if (cached) {
       logger.debug('Returning cached contests from memory')
       return cached
@@ -93,7 +102,7 @@ export const kontestsService = {
 
       const contests = raw
         .map(parseKontestsContest)
-        .filter((c): c is Omit<Contest, 'status' | 'hasReminder'> => c !== null)
+        .filter((c): c is Contest => c !== null)
 
       if (contests.length > 0) {
         contestsCache.set(CACHE_KEY, contests)
@@ -108,7 +117,7 @@ export const kontestsService = {
     try {
       const res = await httpGet<CfContestListResponse>('https://codeforces.com/api/contest.list?gym=false')
       if (res.status === 'OK' && res.result) {
-        const cfContests: Omit<Contest, 'status' | 'hasReminder'>[] = res.result
+        const cfContests: Contest[] = res.result
           .filter(c => c.startTimeSeconds && c.phase !== 'FINISHED')
           .map(c => ({
             id:        `codeforces_${c.id}`,
@@ -117,6 +126,7 @@ export const kontestsService = {
             url:       `https://codeforces.com/contest/${c.id}`,
             startTime: c.startTimeSeconds!,
             duration:  c.durationSeconds,
+            status:    computeContestStatus(c.startTimeSeconds!, c.durationSeconds),
           }))
 
         if (cfContests.length > 0) {

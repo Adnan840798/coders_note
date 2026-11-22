@@ -22,23 +22,15 @@
   })
 
   function fetchContests() {
-    const statusFilter = activeTab === 'all' ? undefined : [activeTab]
-    const platformFilter = selectedPlatform === 'all' ? undefined : [selectedPlatform]
-    contestsStore.fetch({
-      search: searchQuery.trim() || undefined,
-      sites:  platformFilter,
-      status: statusFilter,
-    })
+    contestsStore.fetch()
   }
 
   function handleTabChange(tab: 'all' | ContestStatus) {
     activeTab = tab
-    fetchContests()
   }
 
   function handlePlatformChange(platformId: string) {
     selectedPlatform = platformId
-    fetchContests()
   }
 
   function formatDuration(secs: number): string {
@@ -89,11 +81,33 @@
     }
   }
 
+  $: allContests = $contestsStore.contests
+
   $: counts = {
-    running:  $contestsStore.contests.filter(c => c.status === 'running').length,
-    upcoming: $contestsStore.contests.filter(c => c.status === 'upcoming').length,
-    total:    $contestsStore.contests.length,
+    running:  allContests.filter(c => c.status === 'running').length,
+    upcoming: allContests.filter(c => c.status === 'upcoming').length,
+    ended:    allContests.filter(c => c.status === 'ended').length,
+    total:    allContests.length,
   }
+
+  $: filteredContests = allContests.filter(contest => {
+    // Status filter
+    if (activeTab !== 'all' && contest.status !== activeTab) {
+      return false
+    }
+    // Platform filter
+    if (selectedPlatform !== 'all' && contest.site !== selectedPlatform) {
+      return false
+    }
+    // Search query
+    if (searchQuery.trim()) {
+      const q = searchQuery.trim().toLowerCase()
+      if (!contest.title.toLowerCase().includes(q) && !contest.site.toLowerCase().includes(q)) {
+        return false
+      }
+    }
+    return true
+  })
 </script>
 
 <div class="dashboard-page anim-fade-in">
@@ -173,26 +187,25 @@
         type="search"
         placeholder="Filter contests…"
         bind:value={searchQuery}
-        on:input={fetchContests}
         id="input-contest-search"
       />
     </div>
   </div>
 
   <!-- Schedule Table View -->
-  {#if $contestsStore.loading && $contestsStore.contests.length === 0}
+  {#if $contestsStore.loading && allContests.length === 0}
     <div class="state-card">
       <div class="spinner-brand anim-spin" />
       <p class="state-title">Retrieving contest feeds…</p>
       <p class="state-subtitle">Checking live rounds and upcoming registered schedules</p>
     </div>
-  {:else if $contestsStore.error && $contestsStore.contests.length === 0}
+  {:else if $contestsStore.error && allContests.length === 0}
     <div class="state-card state-card--error">
       <p class="state-title">Unable to synchronize contest feeds</p>
       <p class="state-subtitle">{$contestsStore.error}</p>
       <button class="btn-retry" on:click={fetchContests}>Retry</button>
     </div>
-  {:else if $contestsStore.contests.length === 0}
+  {:else if filteredContests.length === 0}
     <div class="state-card">
       <p class="state-title">No contests match your filters</p>
       <p class="state-subtitle">Try resetting the search query or switching to "All Platforms".</p>
@@ -207,7 +220,7 @@
       </div>
 
       <div class="table-body">
-        {#each $contestsStore.contests as contest (contest.id)}
+        {#each filteredContests as contest (contest.id)}
           {@const dateInfo = formatDateRow(contest.startTime)}
           {@const countdown = timeCountdownLabel(contest)}
           <div
